@@ -374,6 +374,19 @@ or_cc_test(
 )
 
 or_cc_test(
+    name = "set_cover_lagrangian_test",
+    size = "small",
+    srcs = ["set_cover_lagrangian_test.cc"],
+    deps = [
+        ":base_types",
+        ":set_cover_invariant",
+        ":set_cover_lagrangian",
+        ":set_cover_model",
+        "//ortools/base:gmock_main",
+    ],
+)
+
+or_cc_test(
     name = "set_cover_test",
     size = "medium",
     timeout = "eternal",

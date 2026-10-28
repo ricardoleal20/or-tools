@@ -17,6 +17,7 @@
 #include <memory>
 #include <tuple>
 
+#include "absl/log/check.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "ortools/base/threadpool.h"
@@ -49,6 +50,7 @@ namespace operations_research {
 
 // Parameters for SetCoverLagrangian.
 struct SetCoverLagrangianParams : public SetCoverOptimizerParamsBase {
+  // Must be positive. After construction, use UseNumThreads() to change it.
   int num_threads = 1;
 };
 
@@ -62,18 +64,20 @@ class SetCoverLagrangian
                      std::unique_ptr<SetCoverLagrangianParams> params)
       : SubsetListBasedOptimizer(
             inv, SetCoverInvariant::ConsistencyLevel::kInconsistent,
-            std::move(params)),
-        thread_pool_(nullptr) {}
+            std::move(params)) {
+    UseNumThreads(this->params().num_threads);
+  }
 
   SetCoverLagrangian(SetCoverInvariant* inv, const absl::string_view name)
-      : SubsetListBasedOptimizer(
-            inv, SetCoverInvariant::ConsistencyLevel::kInconsistent,
-            std::make_unique<SetCoverLagrangianParams>()) {
+      : SetCoverLagrangian(inv, std::make_unique<SetCoverLagrangianParams>()) {
     SetName(name);
     params().class_name = "Lagrangian";
   }
 
+  // Recreates the pool with num_threads > 0 workers. Call only between
+  // computations; concurrent calls on the same optimizer are not supported.
   SetCoverLagrangian& UseNumThreads(int num_threads) {
+    CHECK_GT(num_threads, 0);
     params().num_threads = num_threads;
     thread_pool_ = std::make_unique<ThreadPool>(num_threads);
     return *this;
@@ -93,7 +97,7 @@ class SetCoverLagrangian
       const ElementCostVector& multipliers) const;
 
   // Same as above, but parallelized, using the number of threads specified in
-  // the constructor.
+  // the parameters or UseNumThreads().
   SubsetCostVector ParallelComputeReducedCosts(
       const SubsetCostVector& costs,
       const ElementCostVector& multipliers) const;
@@ -105,7 +109,7 @@ class SetCoverLagrangian
       const SubsetCostVector& reduced_costs) const;
 
   // Same as above, but parallelized, using the number of threads specified in
-  // the constructor.
+  // the parameters or UseNumThreads().
   ElementCostVector ParallelComputeSubgradient(
       const SubsetCostVector& reduced_costs) const;
 
@@ -117,7 +121,7 @@ class SetCoverLagrangian
                               const ElementCostVector& multipliers) const;
 
   // Same as above, but parallelized, using the number of threads specified in
-  // the constructor.
+  // the parameters or UseNumThreads().
   Cost ParallelComputeLagrangianValue(
       const SubsetCostVector& reduced_costs,
       const ElementCostVector& multipliers) const;
@@ -132,7 +136,7 @@ class SetCoverLagrangian
                          ElementCostVector* multipliers) const;
 
   // Same as above, but parallelized, using the number of threads specified in
-  // the constructor.
+  // the parameters or UseNumThreads().
   void ParallelUpdateMultipliers(double step_size, Cost lagrangian_value,
                                  Cost upper_bound,
                                  const SubsetCostVector& reduced_costs,
@@ -145,10 +149,8 @@ class SetCoverLagrangian
                   const SubsetBoolVector& solution,
                   const ElementCostVector& multipliers) const;
 
-  // Performs the three-phase algorithm.
-  void ThreePhase(Cost upper_bound);
-
-  // Computes a lower bound on the optimal cost.
+  // Computes a lower bound on the optimal cost. The constructor initializes
+  // the thread pool, so calling UseNumThreads() first is optional.
   // The returned value is the lower bound, the reduced costs, and the
   // multipliers.
   std::tuple<Cost, SubsetCostVector, ElementCostVector> ComputeLowerBound(
